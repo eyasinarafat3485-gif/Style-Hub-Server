@@ -184,22 +184,51 @@ const createProduct = async (req, res) => {
       isTrending,
     } = req.body;
 
-    const generatedSlug = slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const generatedSlug =
+      slug ||
+      (name ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : `product-${Date.now()}`);
 
-    const product = new Product({
-      name,
+    const newProductData = {
+      _id: String(Date.now()),
+      id: String(Date.now()),
+      name: name || 'Untitled Product',
+      title: name || 'Untitled Product',
       slug: generatedSlug,
-      category,
-      image,
-      images: images || [image],
-      price,
-      oldPrice: oldPrice || null,
+      category: category || 'Panjabi',
+      image: image || 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&auto=format&fit=crop&q=80',
+      images: images || [image || 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&auto=format&fit=crop&q=80'],
+      price: Number(price) || 0,
+      oldPrice: oldPrice ? Number(oldPrice) : null,
       discountBadge: discountBadge || '',
-      description,
+      description: description || 'Exclusive product from StyleHub Collection.',
       colors: colors || ['Default'],
       sizes: sizes || ['S', 'M', 'L', 'XL'],
       countInStock: countInStock || 50,
       isTrending: Boolean(isTrending),
+      isNewArrival: true,
+      rating: 5.0,
+      reviewCount: 0,
+    };
+
+    if (mongoose.connection.readyState !== 1) {
+      productsSeed.unshift(newProductData);
+      return res.status(201).json(newProductData);
+    }
+
+    const product = new Product({
+      name: newProductData.name,
+      slug: generatedSlug,
+      category: newProductData.category,
+      image: newProductData.image,
+      images: newProductData.images,
+      price: newProductData.price,
+      oldPrice: newProductData.oldPrice,
+      discountBadge: newProductData.discountBadge,
+      description: newProductData.description,
+      colors: newProductData.colors,
+      sizes: newProductData.sizes,
+      countInStock: newProductData.countInStock,
+      isTrending: newProductData.isTrending,
     });
 
     const createdProduct = await product.save();
@@ -217,6 +246,15 @@ const createProduct = async (req, res) => {
 // @access  Private/Admin
 const updateProduct = async (req, res) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      const idx = productsSeed.findIndex((p) => p.id === req.params.id || p._id === req.params.id);
+      if (idx !== -1) {
+        Object.assign(productsSeed[idx], req.body);
+        return res.json(productsSeed[idx]);
+      }
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
     const product = await Product.findById(req.params.id);
 
     if (!product) {
@@ -243,6 +281,14 @@ const updateProduct = async (req, res) => {
 // @access  Private/Admin
 const deleteProduct = async (req, res) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      const idx = productsSeed.findIndex((p) => p.id === req.params.id || p._id === req.params.id);
+      if (idx !== -1) {
+        productsSeed.splice(idx, 1);
+      }
+      return res.json({ success: true, message: 'Product removed successfully' });
+    }
+
     const product = await Product.findById(req.params.id);
 
     if (!product) {

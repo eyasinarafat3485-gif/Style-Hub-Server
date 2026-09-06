@@ -122,6 +122,12 @@ const login = async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
+    if (error.message?.includes('buffering timed out') || error.message?.includes('ENOTFOUND') || error.name === 'MongooseError') {
+      return res.status(503).json({
+        success: false,
+        message: 'Database connection is temporarily busy or disconnected. Please check your internet and try again.',
+      });
+    }
     return res.status(500).json({
       success: false,
       message: error.message || 'Server error during login',
@@ -176,9 +182,9 @@ const googleAuth = async (req, res) => {
     let user = await User.findOne({ email: email.toLowerCase() });
 
     if (user) {
-      // Update Google ID and avatar if not set
-      if (!user.googleId && googleId) user.googleId = googleId;
-      if (!user.avatar && picture) user.avatar = picture;
+      // Update Google ID and avatar if provided
+      if (googleId) user.googleId = googleId;
+      if (picture) user.avatar = picture;
       await user.save();
     } else {
       // Create new user from Google

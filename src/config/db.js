@@ -14,8 +14,21 @@ const connectDB = async () => {
       return;
     }
 
+    // Set buffer timeout to 5s instead of 10s so queries fail fast if connection drops
+    mongoose.set('bufferTimeoutMS', 5000);
+
+    // Event Listeners for DB Connection Health
+    mongoose.connection.on('disconnected', () => {
+      console.warn('⚠️ MongoDB disconnected! Attempting reconnect...');
+    });
+
+    mongoose.connection.on('reconnected', () => {
+      console.log('✅ MongoDB reconnected successfully!');
+    });
+
     const conn = await mongoose.connect(mongoUri, {
       serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 10000,
     });
 
     console.log(`✅ MongoDB Connected: ${conn.connection.host} / DB: ${conn.connection.name}`);
