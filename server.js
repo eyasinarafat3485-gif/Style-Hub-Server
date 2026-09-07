@@ -31,9 +31,9 @@ app.use(
   })
 );
 
-// Middleware: Request Body Parsing
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Middleware: Request Body Parsing (10mb limit for Base64 avatars & product images)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Middleware: Logger (Development)
 if (process.env.NODE_ENV === 'development') {
@@ -43,11 +43,19 @@ if (process.env.NODE_ENV === 'development') {
 // Routes
 const authRoutes = require('./src/routes/authRoutes');
 const productRoutes = require('./src/routes/productRoutes');
+const reviewRoutes = require('./src/routes/reviewRoutes');
+const myCollectionRoutes = require('./src/routes/myCollectionRoutes');
+const orderRoutes = require('./src/routes/orderRoutes');
+const notificationRoutes = require('./src/routes/notificationRoutes');
 const { notFound, errorHandler } = require('./src/middleware/errorMiddleware');
 
 // Mount API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/my-collections', myCollectionRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

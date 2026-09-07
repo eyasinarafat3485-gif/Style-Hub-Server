@@ -45,10 +45,14 @@ const userSchema = new mongoose.Schema(
     },
     address: {
       street: { type: String, default: '' },
+      thana: { type: String, default: '' },
+      district: { type: String, default: '' },
       city: { type: String, default: '' },
       state: { type: String, default: '' },
       postalCode: { type: String, default: '' },
       country: { type: String, default: 'Bangladesh' },
+      phone: { type: String, default: '' },
+      label: { type: String, default: 'Primary Address' },
     },
   },
   {
