@@ -308,10 +308,134 @@ const updateProfile = async (req, res) => {
   }
 };
 
+const Order = require('../models/Order');
+
+// @desc    Get all registered users with order statistics (Admin only)
+// @route   GET /api/auth/users
+// @access  Private/Admin
+const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find({}).sort({ createdAt: -1 });
+    const orders = await Order.find({});
+
+    const enrichedUsers = users.map((u) => {
+      const userOrders = orders.filter(
+        (o) =>
+          o.user?.toString() === u._id.toString() ||
+          o.shippingAddress?.fullName?.toLowerCase() === u.name?.toLowerCase() ||
+          o.userEmail?.toLowerCase() === u.email?.toLowerCase()
+      );
+      const totalOrders = userOrders.length;
+      const totalSpent = userOrders
+        .filter((o) => o.status !== 'Cancelled')
+        .reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
+
+      return {
+        _id: u._id,
+        id: u._id,
+        name: u.name,
+        email: u.email,
+        role: u.role || 'user',
+        authProvider: u.authProvider || 'local',
+        avatar: u.avatar || '',
+        phone: u.address?.phone || '',
+        address: [u.address?.street, u.address?.city, u.address?.country]
+          .filter(Boolean)
+          .join(', '),
+        createdAt: u.createdAt,
+        totalOrders,
+        totalSpent,
+      };
+    });
+
+    return res.json({
+      success: true,
+      count: enrichedUsers.length,
+      users: enrichedUsers,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch users',
+    });
+  }
+};
+
+// @desc    Update user role (Admin only)
+// @route   PUT /api/auth/users/:id/role
+// @access  Private/Admin
+const updateUserRole = async (req, res) => {
+  try {
+    const { role } = req.body;
+    if (!['user', 'admin'].includes(role)) {
+      return res.status(400).json({ success: false, message: 'Invalid role specified' });
+    }
+
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    targetUser.role = role;
+    await targetUser.save();
+
+    return res.json({
+      success: true,
+      message: `User role updated to ${role}`,
+      user: {
+        _id: targetUser._id,
+        id: targetUser._id,
+        name: targetUser.name,
+        email: targetUser.email,
+        role: targetUser.role,
+        avatar: targetUser.avatar,
+        authProvider: targetUser.authProvider,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update user role',
+    });
+  }
+};
+
+// @desc    Delete user account (Admin only)
+// @route   DELETE /api/auth/users/:id
+// @access  Private/Admin
+const deleteUser = async (req, res) => {
+  try {
+    if (req.user._id.toString() === req.params.id) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'You cannot delete your own admin account' });
+    }
+
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    await User.findByIdAndDelete(req.params.id);
+    return res.json({
+      success: true,
+      message: 'User deleted successfully',
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to delete user',
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
   googleAuth,
   getMe,
   updateProfile,
+  getAllUsers,
+  updateUserRole,
+  deleteUser,
 };

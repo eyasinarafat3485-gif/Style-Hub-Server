@@ -6,8 +6,11 @@ const {
   googleAuth,
   getMe,
   updateProfile,
+  getAllUsers,
+  updateUserRole,
+  deleteUser,
 } = require('../controllers/authController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, admin } = require('../middleware/authMiddleware');
 
 // Public routes
 router.post('/register', register);
@@ -18,4 +21,10 @@ router.post('/google', googleAuth);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
 
+// Admin User Management routes
+router.get('/users', protect, admin, getAllUsers);
+router.put('/users/:id/role', protect, admin, updateUserRole);
+router.delete('/users/:id', protect, admin, deleteUser);
+
 module.exports = router;
+

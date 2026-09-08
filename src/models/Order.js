@@ -15,6 +15,11 @@ const orderSchema = new mongoose.Schema(
         price: { type: Number, required: true },
         selectedSize: { type: String, default: 'M' },
         selectedColor: { type: String, default: '' },
+        status: {
+          type: String,
+          enum: ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'],
+          default: 'Pending',
+        },
         product: {
           type: mongoose.Schema.Types.ObjectId,
           ref: 'Product',
