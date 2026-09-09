@@ -1,4 +1,5 @@
 const MyCollection = require('../models/MyCollection');
+const Notification = require('../models/Notification');
 const { createNotificationHelper } = require('./notificationController');
 
 // @desc    Get logged in user's cart & wishlist collections
@@ -191,6 +192,19 @@ const toggleWishlistItem = async (req, res) => {
 
     if (existingWishlist) {
       await MyCollection.findByIdAndDelete(existingWishlist._id);
+      // Clean up notification for this wishlist item
+      try {
+        await Notification.deleteMany({
+          user: req.user._id,
+          type: 'wishlist_add',
+          $or: [
+            { productName: existingWishlist.name },
+            { productImage: existingWishlist.image },
+          ],
+        });
+      } catch (delErr) {
+        console.warn('Wishlist notification cleanup warning:', delErr.message);
+      }
       return res.json({
         success: true,
         action: 'removed',
@@ -303,6 +317,29 @@ const removeFromMyCollection = async (req, res) => {
 
     const deletedItem = await MyCollection.findOneAndDelete(filter);
 
+    if (deletedItem) {
+      try {
+        if (deletedItem.itemType === 'wishlist') {
+          await Notification.deleteMany({
+            user: req.user._id,
+            type: 'wishlist_add',
+            $or: [
+              { productName: deletedItem.name },
+              { productImage: deletedItem.image },
+            ],
+          });
+        } else if (deletedItem.itemType === 'cart') {
+          await Notification.deleteMany({
+            user: req.user._id,
+            type: { $in: ['cart_add', 'wishlist_to_cart'] },
+            productName: deletedItem.name,
+          });
+        }
+      } catch (dErr) {
+        console.warn('Collection notification cleanup notice:', dErr.message);
+      }
+    }
+
     return res.json({
       success: true,
       message: 'Item removed from collection',
@@ -330,6 +367,22 @@ const clearCollection = async (req, res) => {
       user: req.user._id,
       itemType,
     });
+
+    try {
+      if (itemType === 'wishlist') {
+        await Notification.deleteMany({
+          user: req.user._id,
+          type: 'wishlist_add',
+        });
+      } else if (itemType === 'cart') {
+        await Notification.deleteMany({
+          user: req.user._id,
+          type: { $in: ['cart_add', 'wishlist_to_cart'] },
+        });
+      }
+    } catch (cErr) {
+      console.warn('Clear collection notification cleanup notice:', cErr.message);
+    }
 
     return res.json({
       success: true,

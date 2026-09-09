@@ -310,25 +310,40 @@ const updateProfile = async (req, res) => {
 
 const Order = require('../models/Order');
 
-// @desc    Get all registered users with order statistics (Admin only)
+// @desc    Get all customers (Registered Users + Checkout Guest Shoppers) with order statistics (Admin only)
 // @route   GET /api/auth/users
 // @access  Private/Admin
 const getAllUsers = async (req, res) => {
   try {
     const users = await User.find({}).sort({ createdAt: -1 });
-    const orders = await Order.find({});
+    const orders = await Order.find({}).sort({ createdAt: -1 });
 
+    const registeredEmails = new Set(
+      users.map((u) => (u.email ? u.email.toLowerCase().trim() : '')).filter(Boolean)
+    );
+    const registeredUserIds = new Set(users.map((u) => u._id.toString()));
+
+    // 1. Enriched Registered Users
     const enrichedUsers = users.map((u) => {
-      const userOrders = orders.filter(
-        (o) =>
-          o.user?.toString() === u._id.toString() ||
-          o.shippingAddress?.fullName?.toLowerCase() === u.name?.toLowerCase() ||
-          o.userEmail?.toLowerCase() === u.email?.toLowerCase()
-      );
+      const uEmail = u.email ? u.email.toLowerCase().trim() : '';
+      const userOrders = orders.filter((o) => {
+        const matchesId = o.user && o.user.toString() === u._id.toString();
+        const matchesEmail =
+          (o.userEmail && o.userEmail.toLowerCase().trim() === uEmail) ||
+          (o.shippingAddress?.email && o.shippingAddress.email.toLowerCase().trim() === uEmail);
+        return matchesId || matchesEmail;
+      });
+
       const totalOrders = userOrders.length;
       const totalSpent = userOrders
         .filter((o) => o.status !== 'Cancelled')
         .reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
+
+      const firstOrder = userOrders[0];
+      const primaryPhone = u.address?.phone || firstOrder?.shippingAddress?.phone || '';
+      const primaryAddress =
+        [u.address?.street, u.address?.city, u.address?.country].filter(Boolean).join(', ') ||
+        [firstOrder?.shippingAddress?.address, firstOrder?.shippingAddress?.city || firstOrder?.shippingAddress?.district].filter(Boolean).join(', ');
 
       return {
         _id: u._id,
@@ -338,25 +353,93 @@ const getAllUsers = async (req, res) => {
         role: u.role || 'user',
         authProvider: u.authProvider || 'local',
         avatar: u.avatar || '',
-        phone: u.address?.phone || '',
-        address: [u.address?.street, u.address?.city, u.address?.country]
-          .filter(Boolean)
-          .join(', '),
+        phone: primaryPhone,
+        address: primaryAddress,
+        isRegistered: true,
         createdAt: u.createdAt,
         totalOrders,
         totalSpent,
       };
     });
 
+    // 2. Extract and Group Guest Customers from Orders
+    const guestCustomerMap = new Map();
+
+    for (const ord of orders) {
+      const isRegisteredOrder =
+        (ord.user && registeredUserIds.has(ord.user.toString())) ||
+        (ord.userEmail && registeredEmails.has(ord.userEmail.toLowerCase().trim())) ||
+        (ord.shippingAddress?.email && registeredEmails.has(ord.shippingAddress.email.toLowerCase().trim()));
+
+      if (isRegisteredOrder) continue;
+
+      const emailKey = (ord.shippingAddress?.email || ord.userEmail || '').toLowerCase().trim();
+      const phoneKey = (ord.shippingAddress?.phone || '').trim();
+      const nameKey = (ord.shippingAddress?.fullName || '').toLowerCase().trim();
+
+      const customerKey = emailKey || phoneKey || nameKey || `guest_order_${ord._id}`;
+
+      if (!guestCustomerMap.has(customerKey)) {
+        guestCustomerMap.set(customerKey, {
+          _id: `guest_${ord._id}`,
+          id: `guest_${ord._id}`,
+          name: ord.shippingAddress?.fullName || 'Guest Customer',
+          email: emailKey || (phoneKey ? `Phone: ${phoneKey}` : 'Guest Shopper'),
+          phone: phoneKey,
+          address: [ord.shippingAddress?.address, ord.shippingAddress?.city || ord.shippingAddress?.district].filter(Boolean).join(', '),
+          role: 'guest',
+          authProvider: 'checkout',
+          avatar: '',
+          isRegistered: false,
+          createdAt: ord.createdAt,
+          orders: [],
+        });
+      }
+
+      const custEntry = guestCustomerMap.get(customerKey);
+      custEntry.orders.push(ord);
+      if (!custEntry.phone && phoneKey) custEntry.phone = phoneKey;
+      if (!custEntry.address && ord.shippingAddress?.address) {
+        custEntry.address = [ord.shippingAddress?.address, ord.shippingAddress?.city || ord.shippingAddress?.district].filter(Boolean).join(', ');
+      }
+    }
+
+    const guestCustomers = Array.from(guestCustomerMap.values()).map((g) => {
+      const totalOrders = g.orders.length;
+      const totalSpent = g.orders
+        .filter((o) => o.status !== 'Cancelled')
+        .reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
+
+      return {
+        _id: g._id,
+        id: g.id,
+        name: g.name,
+        email: g.email,
+        phone: g.phone,
+        address: g.address,
+        role: 'guest',
+        authProvider: 'checkout',
+        avatar: '',
+        isRegistered: false,
+        createdAt: g.createdAt,
+        totalOrders,
+        totalSpent,
+      };
+    });
+
+    const allCustomers = [...enrichedUsers, ...guestCustomers];
+
     return res.json({
       success: true,
-      count: enrichedUsers.length,
-      users: enrichedUsers,
+      count: allCustomers.length,
+      users: allCustomers,
+      registeredCount: enrichedUsers.length,
+      guestCount: guestCustomers.length,
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch users',
+      message: error.message || 'Failed to fetch customers',
     });
   }
 };
@@ -400,11 +483,20 @@ const updateUserRole = async (req, res) => {
   }
 };
 
-// @desc    Delete user account (Admin only)
+// @desc    Delete user account or guest customer record (Admin only)
 // @route   DELETE /api/auth/users/:id
 // @access  Private/Admin
 const deleteUser = async (req, res) => {
   try {
+    if (req.params.id && req.params.id.startsWith('guest_')) {
+      const orderId = req.params.id.replace('guest_', '');
+      await Order.findByIdAndDelete(orderId);
+      return res.json({
+        success: true,
+        message: 'Guest customer record deleted successfully',
+      });
+    }
+
     if (req.user._id.toString() === req.params.id) {
       return res
         .status(400)

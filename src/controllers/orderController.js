@@ -4,7 +4,7 @@ const { createNotificationHelper } = require('./notificationController');
 
 // @desc    Create new order
 // @route   POST /api/orders
-// @access  Private
+// @access  Public / Private
 const createOrder = async (req, res) => {
   try {
     const {
@@ -14,48 +14,113 @@ const createOrder = async (req, res) => {
       itemsPrice,
       shippingPrice = 60,
       totalPrice,
+      customerInfo,
+      notes,
     } = req.body;
 
     if (!orderItems || orderItems.length === 0) {
       return res.status(400).json({ success: false, message: 'No order items provided' });
     }
 
-    const order = new Order({
-      user: req.user._id,
+    const resolvedFullName =
+      shippingAddress?.fullName || customerInfo?.name || req.user?.name || 'Customer';
+    const resolvedPhone =
+      shippingAddress?.phone ||
+      customerInfo?.phone ||
+      req.user?.address?.phone ||
+      req.user?.phone ||
+      '+880 1712-345678';
+    const resolvedEmail =
+      customerInfo?.email || req.user?.email || '';
+    const resolvedAddress =
+      shippingAddress?.address || customerInfo?.address || req.user?.address?.street || 'Dhaka';
+    const resolvedCity =
+      shippingAddress?.city || customerInfo?.city || req.user?.address?.city || 'Dhaka';
+    const resolvedPostal =
+      shippingAddress?.postalCode || customerInfo?.postalCode || req.user?.address?.postalCode || '';
+
+    const orderData = {
       orderItems,
-      shippingAddress: shippingAddress || {
-        fullName: req.user.name,
-        phone: req.user.phone || '+880 1712-345678',
-        address: 'Dhanmondi',
-        city: 'Dhaka',
+      shippingAddress: {
+        fullName: resolvedFullName,
+        phone: resolvedPhone,
+        address: resolvedAddress,
+        city: resolvedCity,
+        postalCode: resolvedPostal,
       },
       paymentMethod,
       itemsPrice: Number(itemsPrice) || 0,
       shippingPrice: Number(shippingPrice) || 60,
       totalPrice: Number(totalPrice) || Number(itemsPrice || 0) + Number(shippingPrice || 60),
       status: 'Pending',
-    });
+      notes: notes || '',
+    };
 
+    const hasRealUser = req.user && req.user._id && String(req.user._id) !== 'admin-id';
+    if (hasRealUser) {
+      orderData.user = req.user._id;
+    } else {
+      orderData.guestInfo = {
+        fullName: resolvedFullName,
+        email: resolvedEmail,
+        phone: resolvedPhone,
+      };
+    }
+
+    const order = new Order(orderData);
     const createdOrder = await order.save();
 
-    // Clear cart from MyCollection after successful order placement
-    await MyCollection.deleteMany({ user: req.user._id, itemType: 'cart' });
+    // Clear cart from MyCollection if logged in
+    if (hasRealUser) {
+      await MyCollection.deleteMany({ user: req.user._id, itemType: 'cart' });
+    }
 
-    // Trigger Notification for User
+    // Trigger Notification for User if logged in
     const shortId = `SH-${createdOrder._id.toString().slice(-6).toUpperCase()}`;
     const firstItemImg = orderItems[0]?.image || '';
     const firstItemName = orderItems[0]?.name || orderItems[0]?.title || 'Fashion item';
 
-    await createNotificationHelper({
-      user: req.user._id,
-      title: `Order #${shortId} Placed Successfully!`,
-      message: `Your order containing ${orderItems.length} item(s) for ৳${createdOrder.totalPrice} has been confirmed.`,
-      type: 'order_status',
-      productImage: firstItemImg,
-      productName: firstItemName,
-      price: createdOrder.totalPrice,
-      orderId: shortId,
-    });
+    // 1. Notify Customer
+    if (hasRealUser) {
+      try {
+        await createNotificationHelper({
+          user: req.user._id,
+          userEmail: req.user.email || '',
+          title: `🎉 Order #${shortId} Placed Successfully!`,
+          message: `Your order containing ${orderItems.length} item(s) for ৳${createdOrder.totalPrice.toLocaleString('en-BD')} has been confirmed.`,
+          type: 'order_status',
+          productImage: firstItemImg,
+          productName: firstItemName,
+          price: createdOrder.totalPrice,
+          orderId: shortId,
+        });
+      } catch (nErr) {
+        console.warn('Failed to dispatch user notification:', nErr.message);
+      }
+    }
+
+    // 2. Notify Admin(s)
+    try {
+      const User = require('../models/User');
+      const adminUsers = await User.find({ role: 'admin' });
+      const adminList = adminUsers.length > 0 ? adminUsers : [{ _id: 'admin-id', email: 'eyasinwebdev@gmail.com' }];
+
+      for (const adm of adminList) {
+        await createNotificationHelper({
+          user: adm._id,
+          userEmail: adm.email || '',
+          title: `🛍️ New Order Received: #${shortId}`,
+          message: `Customer "${resolvedFullName}" placed an order (${orderItems.length} items) for ৳${createdOrder.totalPrice.toLocaleString('en-BD')}.`,
+          type: 'order_status',
+          productImage: firstItemImg,
+          productName: `${firstItemName} (${orderItems.length} item${orderItems.length > 1 ? 's' : ''})`,
+          price: createdOrder.totalPrice,
+          orderId: shortId,
+        });
+      }
+    } catch (admErr) {
+      console.warn('Failed to dispatch admin notification:', admErr.message);
+    }
 
     return res.status(201).json({
       success: true,
