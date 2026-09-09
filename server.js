@@ -52,6 +52,7 @@ const brandRoutes = require('./src/routes/brandRoutes');
 const tagRoutes = require('./src/routes/tagRoutes');
 const attributeRoutes = require('./src/routes/attributeRoutes');
 const settingRoutes = require('./src/routes/settingRoutes');
+const analyticsRoutes = require('./src/routes/analyticsRoutes');
 const { notFound, errorHandler } = require('./src/middleware/errorMiddleware');
 
 // Mount API routes
@@ -66,6 +67,7 @@ app.use('/api/brands', brandRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/attributes', attributeRoutes);
 app.use('/api/settings', settingRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
