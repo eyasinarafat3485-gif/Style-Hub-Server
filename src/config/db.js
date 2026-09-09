@@ -1,44 +1,49 @@
 const mongoose = require('mongoose');
 
+let cached = global.mongoose;
+
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
 const connectDB = async () => {
-  try {
-    const mongoUri = process.env.MONGO_URI;
+  const mongoUri = process.env.MONGO_URI;
 
-    if (!mongoUri) {
-      console.warn('⚠️  MONGO_URI is not defined in environment variables.');
-      return;
-    }
+  if (!mongoUri) {
+    console.warn('⚠️  MONGO_URI is not defined in environment variables.');
+    return null;
+  }
 
-    if (mongoUri.includes('<db_username>') || mongoUri.includes('<db_password>')) {
-      console.warn('⚠️  MongoDB Notice: Please replace <db_username> and <db_password> in Backend/.env with your actual MongoDB Atlas credentials.');
-      return;
-    }
+  if (mongoUri.includes('<db_username>') || mongoUri.includes('<db_password>')) {
+    console.warn('⚠️  MongoDB Notice: Please replace credentials in MONGO_URI.');
+    return null;
+  }
 
-    // Set buffer timeout to 5s instead of 10s so queries fail fast if connection drops
+  if (cached.conn && mongoose.connection.readyState === 1) {
+    return cached.conn;
+  }
+
+  if (!cached.promise) {
     mongoose.set('bufferTimeoutMS', 5000);
 
-    // Event Listeners for DB Connection Health
-    mongoose.connection.on('disconnected', () => {
-      console.warn('⚠️ MongoDB disconnected! Attempting reconnect...');
-    });
-
-    mongoose.connection.on('reconnected', () => {
-      console.log('✅ MongoDB reconnected successfully!');
-    });
-
-    const conn = await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 5000,
-      connectTimeoutMS: 10000,
-    });
-
-    console.log(`✅ MongoDB Connected: ${conn.connection.host} / DB: ${conn.connection.name}`);
-  } catch (error) {
-    console.error(`❌ MongoDB Connection Error: ${error.message}`);
-    // Don't exit process in development to allow server to stay active
-    if (process.env.NODE_ENV === 'production') {
-      process.exit(1);
-    }
+    cached.promise = mongoose
+      .connect(mongoUri, {
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 10000,
+      })
+      .then((mongooseInstance) => {
+        console.log(`✅ MongoDB Connected`);
+        return mongooseInstance;
+      })
+      .catch((err) => {
+        console.error(`❌ MongoDB Connection Error: ${err.message}`);
+        cached.promise = null;
+        return null;
+      });
   }
+
+  cached.conn = await cached.promise;
+  return cached.conn;
 };
 
 module.exports = connectDB;

@@ -40,6 +40,16 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
+// Ensure Database is Connected (Serverless support)
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+  } catch (err) {
+    console.error('DB connect middleware error:', err.message);
+  }
+  next();
+});
+
 // Routes
 const authRoutes = require('./src/routes/authRoutes');
 const productRoutes = require('./src/routes/productRoutes');
