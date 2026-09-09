@@ -3,6 +3,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const morgan = require('morgan');
 const path = require('path');
+const mongoose = require('mongoose');
 const connectDB = require('./src/config/db');
 
 // Load environment variables
@@ -87,6 +88,27 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
   });
+});
+
+// Database diagnostic endpoint
+app.get('/api/db-status', async (req, res) => {
+  try {
+    const hasMongoUri = Boolean(process.env.MONGO_URI);
+    const conn = await connectDB();
+    res.json({
+      success: true,
+      hasMongoUri,
+      dbState: mongoose.connection.readyState, // 1 = connected
+      host: mongoose.connection.host || 'unknown',
+      name: mongoose.connection.name || 'unknown',
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      hasMongoUri: Boolean(process.env.MONGO_URI),
+      error: err.message,
+    });
+  }
 });
 
 // Root welcome route

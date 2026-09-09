@@ -10,13 +10,8 @@ const connectDB = async () => {
   const mongoUri = process.env.MONGO_URI;
 
   if (!mongoUri) {
-    console.warn('⚠️  MONGO_URI is not defined in environment variables.');
-    return null;
-  }
-
-  if (mongoUri.includes('<db_username>') || mongoUri.includes('<db_password>')) {
-    console.warn('⚠️  MongoDB Notice: Please replace credentials in MONGO_URI.');
-    return null;
+    console.error('❌ MONGO_URI is missing in environment variables');
+    throw new Error('MONGO_URI is not configured in Vercel environment variables');
   }
 
   if (cached.conn && mongoose.connection.readyState === 1) {
@@ -24,25 +19,32 @@ const connectDB = async () => {
   }
 
   if (!cached.promise) {
-    mongoose.set('bufferTimeoutMS', 5000);
+    const opts = {
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 10000,
+    };
 
     cached.promise = mongoose
-      .connect(mongoUri, {
-        serverSelectionTimeoutMS: 5000,
-        connectTimeoutMS: 10000,
-      })
+      .connect(mongoUri, opts)
       .then((mongooseInstance) => {
-        console.log(`✅ MongoDB Connected`);
+        console.log('✅ MongoDB connected successfully');
         return mongooseInstance;
       })
       .catch((err) => {
-        console.error(`❌ MongoDB Connection Error: ${err.message}`);
         cached.promise = null;
-        return null;
+        console.error('❌ MongoDB Connection Error:', err.message);
+        throw err;
       });
   }
 
-  cached.conn = await cached.promise;
+  try {
+    cached.conn = await cached.promise;
+  } catch (err) {
+    cached.promise = null;
+    throw err;
+  }
+
   return cached.conn;
 };
 
