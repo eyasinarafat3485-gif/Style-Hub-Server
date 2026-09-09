@@ -101,3 +101,5 @@ const server = app.listen(PORT, () => {
 process.on('unhandledRejection', (err) => {
   console.error(`Unhandled Rejection Error: ${err.message}`);
 });
+
+module.exports = app;
