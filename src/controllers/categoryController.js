@@ -1,4 +1,5 @@
 const Category = require('../models/Category');
+const connectDB = require('../config/db');
 
 const defaultCategories = [
   { name: "Panjabi", slug: "/category/panjabi", description: "Men's Panjabi & Ethnic Wear", itemCount: 36 },
@@ -8,7 +9,6 @@ const defaultCategories = [
   { name: "Kurtis", slug: "/category/kurtis", description: "Designer Stylish Kurtis", itemCount: 25 },
   { name: "Men", slug: "/category/men", description: "Men's Apparel & Accessories", itemCount: 54 },
   { name: "Women", slug: "/category/women", description: "Women's Fashion & Silk Sarees", itemCount: 61 },
-  { name: "Kids", slug: "/category/kids", description: "Kids Festive & Casual Wear", itemCount: 18 },
 ];
 
 // @desc    Get all categories (seed initial if empty)
@@ -16,6 +16,7 @@ const defaultCategories = [
 // @access  Public
 const getCategories = async (req, res) => {
   try {
+    await connectDB();
     let categories = await Category.find({}).sort({ createdAt: -1 });
 
     if (categories.length === 0) {
@@ -33,6 +34,7 @@ const getCategories = async (req, res) => {
 // @access  Public / Admin
 const createCategory = async (req, res) => {
   try {
+    await connectDB();
     const { name, description, image, slug } = req.body;
 
     if (!name) {
@@ -66,6 +68,7 @@ const createCategory = async (req, res) => {
 // @access  Public / Admin
 const deleteCategory = async (req, res) => {
   try {
+    await connectDB();
     const category = await Category.findById(req.params.id);
     if (!category) {
       return res.status(404).json({ success: false, message: 'Category not found' });
