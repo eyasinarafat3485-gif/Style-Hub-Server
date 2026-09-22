@@ -1,12 +1,14 @@
 const mongoose = require('mongoose');
 const Product = require('../models/Product');
 const productsSeed = require('../data/productsSeed');
+const connectDB = require('../config/db');
 
 // @desc    Fetch all products with optional filters, search, and sorting
 // @route   GET /api/products
 // @access  Public
 const getProducts = async (req, res) => {
   try {
+    await connectDB();
     const { category, search, sort, isTrending, isNewArrival, limit = 50, page = 1 } = req.query;
 
     // If MongoDB is not yet connected or ready, gracefully serve seed items
@@ -83,6 +85,7 @@ const getProducts = async (req, res) => {
 // @access  Public
 const getProductById = async (req, res) => {
   try {
+    await connectDB();
     const identifier = req.params.id;
 
     if (mongoose.connection.readyState !== 1) {
@@ -125,6 +128,7 @@ const getProductById = async (req, res) => {
 // @access  Public
 const getCategories = async (req, res) => {
   try {
+    await connectDB();
     if (mongoose.connection.readyState !== 1) {
       const categoriesMap = {};
       productsSeed.forEach(p => {
@@ -168,6 +172,7 @@ const getCategories = async (req, res) => {
 // @access  Private/Admin
 const createProduct = async (req, res) => {
   try {
+    await connectDB();
     const {
       name,
       slug,
@@ -246,6 +251,7 @@ const createProduct = async (req, res) => {
 // @access  Private/Admin
 const updateProduct = async (req, res) => {
   try {
+    await connectDB();
     if (mongoose.connection.readyState !== 1) {
       const idx = productsSeed.findIndex((p) => p.id === req.params.id || p._id === req.params.id);
       if (idx !== -1) {
@@ -281,6 +287,7 @@ const updateProduct = async (req, res) => {
 // @access  Private/Admin
 const deleteProduct = async (req, res) => {
   try {
+    await connectDB();
     if (mongoose.connection.readyState !== 1) {
       const idx = productsSeed.findIndex((p) => p.id === req.params.id || p._id === req.params.id);
       if (idx !== -1) {
