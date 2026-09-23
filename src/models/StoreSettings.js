@@ -34,7 +34,7 @@ const storeSettingsSchema = new mongoose.Schema(
       default: [
         {
           id: 'cod',
-          name: 'Cash on Delivery (ক্যাশ অন ডেলিভারি)',
+          name: 'Cash on Delivery',
           badge: 'Most Popular',
           description: 'পণ্য হাতে পেয়ে দেখে মূল্য পরিশোধ করুন। সারা বাংলাদেশে হোম ডেলিভারি সুবিধা।',
           accountNumber: '',
@@ -54,7 +54,7 @@ const storeSettingsSchema = new mongoose.Schema(
         },
         {
           id: 'card_payment',
-          name: 'Online Card / SSLCommerz (ভিসা / মাস্টারকার্ড)',
+          name: 'Online Card / SSLCommerz',
           badge: 'Secure SSL',
           description: 'যেকোনো ভিসা, মাস্টারকার্ড, বা ইসলামিক কার্ডের মাধ্যমে ১০০% নিরাপদ অনলাইন পেমেন্ট।',
           accountNumber: '',
