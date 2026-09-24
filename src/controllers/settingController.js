@@ -33,50 +33,159 @@ const getSettings = async (req, res) => {
 // @access  Private/Admin
 const updateSettings = async (req, res) => {
   try {
-    let settings = await getOrCreateSettings();
+    let settings = await StoreSettings.findOne();
+    if (!settings) {
+      settings = new StoreSettings({});
+    }
 
-    if (req.body.storeName !== undefined) settings.storeName = req.body.storeName;
-    if (req.body.supportEmail !== undefined) settings.supportEmail = req.body.supportEmail;
-    if (req.body.supportPhone !== undefined) settings.supportPhone = req.body.supportPhone;
-    if (req.body.storeAddress !== undefined) settings.storeAddress = req.body.storeAddress;
+    const payload = req.body || {};
 
-    if (req.body.currency) {
-      settings.currency = {
-        ...settings.currency.toObject(),
-        ...req.body.currency,
+    // General & Contact
+    if (payload.storeName !== undefined) settings.storeName = payload.storeName;
+    if (payload.supportEmail !== undefined) settings.supportEmail = payload.supportEmail;
+    if (payload.supportPhone !== undefined) settings.supportPhone = payload.supportPhone;
+    if (payload.storeAddress !== undefined) settings.storeAddress = payload.storeAddress;
+
+    // Theme & Visual Aesthetics
+    if (payload.theme) {
+      const currentTheme = settings.theme ? (settings.theme.toObject ? settings.theme.toObject() : settings.theme) : {};
+      settings.set('theme', {
+        ...currentTheme,
+        ...payload.theme,
+      });
+      settings.markModified('theme');
+    }
+
+    // Branding
+    if (payload.branding) {
+      const currentBranding = settings.branding ? (settings.branding.toObject ? settings.branding.toObject() : settings.branding) : {};
+      settings.set('branding', {
+        ...currentBranding,
+        ...payload.branding,
+      });
+      settings.markModified('branding');
+    }
+
+    // Top Notice
+    if (payload.topNotice) {
+      const currentNotice = settings.topNotice ? (settings.topNotice.toObject ? settings.topNotice.toObject() : settings.topNotice) : {};
+      settings.set('topNotice', {
+        ...currentNotice,
+        ...payload.topNotice,
+      });
+      settings.markModified('topNotice');
+    }
+
+    // Hero Slider Carousel
+    if (Array.isArray(payload.heroSlider)) {
+      settings.set('heroSlider', payload.heroSlider);
+      settings.markModified('heroSlider');
+    }
+
+    // Promotional Banners
+    if (Array.isArray(payload.promoBanners)) {
+      settings.set('promoBanners', payload.promoBanners);
+      settings.markModified('promoBanners');
+    }
+
+    // Custom Page Content (About Us, FAQ, Trust Badges)
+    if (payload.pageContent) {
+      const currentContent = settings.pageContent ? (settings.pageContent.toObject ? settings.pageContent.toObject() : settings.pageContent) : {};
+      const newPageContent = {
+        ...currentContent,
+        aboutUs: payload.pageContent.aboutUs
+          ? { ...(currentContent.aboutUs || {}), ...payload.pageContent.aboutUs }
+          : currentContent.aboutUs,
+        faq: Array.isArray(payload.pageContent.faq)
+          ? payload.pageContent.faq
+          : (currentContent.faq || []),
+        trustBadges: Array.isArray(payload.pageContent.trustBadges)
+          ? payload.pageContent.trustBadges
+          : (currentContent.trustBadges || []),
       };
+      settings.set('pageContent', newPageContent);
+      settings.markModified('pageContent');
     }
 
-    if (req.body.shipping) {
-      settings.shipping = {
-        ...settings.shipping.toObject(),
-        ...req.body.shipping,
-      };
+    // Footer
+    if (payload.footer) {
+      const currentFooter = settings.footer ? (settings.footer.toObject ? settings.footer.toObject() : settings.footer) : {};
+      settings.set('footer', {
+        ...currentFooter,
+        ...payload.footer,
+      });
+      settings.markModified('footer');
     }
 
-    if (req.body.orderNotifications) {
-      settings.orderNotifications = {
-        ...settings.orderNotifications.toObject(),
-        ...req.body.orderNotifications,
-      };
+    // Currency
+    if (payload.currency) {
+      const currentCurrency = settings.currency ? (settings.currency.toObject ? settings.currency.toObject() : settings.currency) : {};
+      settings.set('currency', {
+        ...currentCurrency,
+        ...payload.currency,
+      });
+      settings.markModified('currency');
     }
 
-    if (Array.isArray(req.body.paymentMethods)) {
-      settings.paymentMethods = req.body.paymentMethods;
+    // Shipping
+    if (payload.shipping) {
+      const currentShipping = settings.shipping ? (settings.shipping.toObject ? settings.shipping.toObject() : settings.shipping) : {};
+      settings.set('shipping', {
+        ...currentShipping,
+        ...payload.shipping,
+      });
+      settings.markModified('shipping');
     }
 
-    await settings.save();
+    // Notifications
+    if (payload.orderNotifications) {
+      const currentNotif = settings.orderNotifications ? (settings.orderNotifications.toObject ? settings.orderNotifications.toObject() : settings.orderNotifications) : {};
+      settings.set('orderNotifications', {
+        ...currentNotif,
+        ...payload.orderNotifications,
+      });
+      settings.markModified('orderNotifications');
+    }
+
+    // Payment Methods
+    if (Array.isArray(payload.paymentMethods)) {
+      settings.set('paymentMethods', payload.paymentMethods);
+      settings.markModified('paymentMethods');
+    }
+
+    const saved = await settings.save();
 
     return res.json({
       success: true,
       message: 'Store settings updated successfully! 🎉',
-      settings,
+      settings: saved,
     });
   } catch (error) {
     console.error('Error updating store settings:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to update store settings',
+    });
+  }
+};
+
+// @desc    Reset store settings to system defaults (Admin only)
+// @route   POST /api/settings/reset-defaults
+// @access  Private/Admin
+const resetDefaultSettings = async (req, res) => {
+  try {
+    await StoreSettings.deleteMany({});
+    const newSettings = await StoreSettings.create({});
+    return res.json({
+      success: true,
+      message: 'Store settings successfully reset to factory defaults! 🔄',
+      settings: newSettings,
+    });
+  } catch (error) {
+    console.error('Error resetting store settings:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to reset settings',
     });
   }
 };
@@ -203,6 +312,7 @@ const deletePaymentMethod = async (req, res) => {
 module.exports = {
   getSettings,
   updateSettings,
+  resetDefaultSettings,
   addPaymentMethod,
   updatePaymentMethod,
   deletePaymentMethod,
